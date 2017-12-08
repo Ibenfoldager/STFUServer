@@ -1,8 +1,10 @@
 package server.endpoints;
 
 import com.google.gson.Gson;
+import org.apache.commons.codec.digest.Crypt;
 import server.controllers.TokenController;
 import server.models.Student;
+import server.models.Token;
 import server.providers.StudentTable;
 import server.resources.Log;
 import server.utility.Authenticator;
@@ -21,6 +23,7 @@ public class LoginEndpoint {
     private StudentTable studentTable = new StudentTable();
     private TokenController tokenController = new TokenController();
     private Gson gson = new Gson();
+    private Crypter crypter = new Crypter();
 
     /**
      *
@@ -31,6 +34,9 @@ public class LoginEndpoint {
      */
     @POST
     public Response login(@HeaderParam("Authorization") String token, String jsonLogin) throws Exception {
+
+        jsonLogin = new Gson().fromJson(jsonLogin, String.class);
+        jsonLogin = crypter.decrypt(jsonLogin);
 
         CurrentStudentContext student = tokenController.getStudentFromTokens(token);
         Student currentStudent = student.getCurrentStudent();
@@ -62,19 +68,22 @@ public class LoginEndpoint {
 
             if (doHash.equals(foundStudent.getPassword())) {
                 //sets the token for the student
-                tokenController.setToken(foundStudent);
+                String newToken = tokenController.setToken(foundStudent);
+                Token theNewToken = new Token();
+                theNewToken.setToken(newToken);
+                foundStudent.setToken(theNewToken);
 
-                String json = new Gson().toJson(foundStudent);
-                String crypted = Crypter.encryptDecrypt(json);
+                String tokenJson = new Gson().toJson(newToken);
+                String crypted = crypter.encrypt(tokenJson);
 
                 Log.writeLog(getClass().getName(), this, "Logged in", 0);
                 return Response
                         .status(200)
                         .type("application/json")
-                        .entity(new Gson().toJson(crypted))
+                        .entity(crypted)
                         .build();
             } else {
-                Log.writeLog(getClass().getName(), this, "Password incorect", 2);
+                Log.writeLog(getClass().getName(), this, "Password incorrect", 2);
                 return Response
                         .status(403)
                         .type("plain/text")
